@@ -1,0 +1,185 @@
+import csv, json, os
+
+cat_order = ['Bolt / Green / Pet / Women', 'Comfort', 'Premium', 'XL', 'Van']
+data = {}
+
+with open('vehicles.csv') as f:
+    reader = csv.reader(f)
+    next(reader)
+    for row in reader:
+        if len(row) < 3: continue
+        c, b, m = row[0].strip(), row[1].strip(), row[2].strip()
+        if not c or not b or not m: continue
+        if c not in data: data[c] = {}
+        if b not in data[c]: data[c][b] = []
+        if m not in data[c][b]: data[c][b].append(m)
+
+raw_lines = []
+for c in cat_order:
+    if c not in data: continue
+    for b in sorted(data[c].keys()):
+        for m in sorted(data[c][b]):
+            raw_lines.append(json.dumps([c, b, m], ensure_ascii=False))
+
+raw_js = ',\n'.join(raw_lines)
+
+html = '''<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bolt — Véhicules éligibles</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--green:#2A9C64;--dark:#1A1A2E;--mid:#6B7280;--light:#F5F5F7;--border:#E5E7EB;--white:#fff}
+  body{font-family:"DM Sans",sans-serif;background:var(--light);color:var(--dark);min-height:100vh}
+  header{background:var(--white);border-bottom:1px solid var(--border);padding:20px 40px;display:flex;align-items:center;gap:16px}
+  .logo{font-size:22px;font-weight:700;letter-spacing:-.5px}
+  .header-sub{font-size:14px;color:var(--mid);border-left:1px solid var(--border);padding-left:16px;margin-left:4px}
+  .container{max-width:1100px;margin:0 auto;padding:32px 24px}
+  .page-sub{font-size:14px;color:var(--mid);margin-bottom:24px}
+  .search-wrap{position:relative;margin-bottom:24px}
+  .search-icon{position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--mid)}
+  #searchInput{width:100%;padding:13px 16px 13px 44px;border:1.5px solid var(--border);border-radius:12px;font-family:"DM Sans",sans-serif;font-size:15px;background:var(--white);outline:none;transition:border-color .2s}
+  #searchInput:focus{border-color:var(--green)}
+  .cat-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+  .cat-tab{padding:8px 16px;border-radius:40px;border:1.5px solid var(--border);background:var(--white);font-family:"DM Sans",sans-serif;font-size:13px;font-weight:500;color:var(--mid);cursor:pointer;transition:all .15s;white-space:nowrap}
+  .cat-tab:hover{border-color:#aaa;color:var(--dark)}
+  .cat-tab.active{background:var(--green);border-color:var(--green);color:var(--white)}
+  .cat-tab .count{font-size:11px;opacity:.8;font-weight:400;margin-left:4px}
+  .stats-line{font-size:13px;color:var(--mid);margin-bottom:16px}
+  .stats-line strong{color:var(--dark)}
+  .brands-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .brand-row{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .brand-header{padding:14px 16px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:background .12s}
+  .brand-header:hover{background:#FAFAFA}
+  .brand-name{font-size:14px;font-weight:600;color:var(--dark)}
+  .brand-right{display:flex;align-items:center;gap:8px}
+  .brand-count{font-size:11px;color:var(--mid);background:var(--light);padding:2px 8px;border-radius:20px;white-space:nowrap}
+  .brand-chevron{color:#CBD5E0;font-size:11px;transition:transform .2s}
+  .brand-row.open .brand-chevron{transform:rotate(180deg)}
+  .models-list{display:none;border-top:1px solid var(--border);padding:8px 0}
+  .brand-row.open .models-list{display:block}
+  .model-item{padding:6px 16px;font-size:13px;color:var(--mid)}
+  .model-item:hover{background:var(--light);color:var(--dark)}
+  .search-results{display:none}
+  .search-result-group{margin-bottom:28px}
+  .result-group-title{font-size:11px;font-weight:600;color:var(--mid);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .result-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+  .result-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--dark)}
+  .result-brand{font-size:10px;font-weight:600;color:var(--mid);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+  .empty{text-align:center;padding:60px 20px;color:var(--mid);font-size:14px;line-height:1.8}
+  mark{background:#FFF3CD;border-radius:3px;padding:0 2px}
+  @media(max-width:768px){.brands-grid{grid-template-columns:repeat(2,1fr)}header{padding:16px 20px}.container{padding:20px 16px}}
+  @media(max-width:480px){.brands-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Bolt</div>
+  <div class="header-sub">Véhicules éligibles</div>
+</header>
+<div class="container">
+  <p class="page-sub">Consultez la liste des véhicules éligibles par catégorie</p>
+  <div class="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input type="text" id="searchInput" placeholder="Rechercher un véhicule ou une marque..." autocomplete="off">
+  </div>
+  <div id="normalView">
+    <div class="cat-tabs" id="catTabs"></div>
+    <div class="stats-line" id="statsLine"></div>
+    <div class="brands-grid" id="brandsGrid"></div>
+  </div>
+  <div class="search-results" id="searchResults"></div>
+</div>
+<script>
+var CAT_ORDER = ["Bolt / Green / Pet / Women","Comfort","Premium","XL","Van"];
+var activeCat = -1;
+var data = {};
+var RAW = [
+''' + raw_js + '''
+];
+for (var i=0;i<RAW.length;i++){
+  var c=RAW[i][0],b=RAW[i][1],m=RAW[i][2];
+  if(!data[c])data[c]={};
+  if(!data[c][b])data[c][b]=[];
+  if(data[c][b].indexOf(m)===-1)data[c][b].push(m);
+}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function hi(s,q){if(!q)return esc(s);return esc(s).replace(new RegExp("("+q.replace(/[.*+?^${}()|[\\]\\\\]/g,"\\\\$&")+")","gi"),"<mark>$1</mark>");}
+function countCat(c){var t=0,bs=Object.keys(data[c]||{});for(var i=0;i<bs.length;i++)t+=data[c][bs[i]].length;return t;}
+function getMerged(idxList){
+  var merged={};
+  for(var i=0;i<idxList.length;i++){
+    var c=CAT_ORDER[idxList[i]];if(!data[c])continue;
+    var bs=Object.keys(data[c]);
+    for(var j=0;j<bs.length;j++){
+      var b=bs[j];if(!merged[b])merged[b]={};
+      var ms=data[c][b];for(var k=0;k<ms.length;k++)merged[b][ms[k]]=true;
+    }
+  }
+  return merged;
+}
+function renderTabs(){
+  var totalAll=0;for(var i=0;i<CAT_ORDER.length;i++)totalAll+=countCat(CAT_ORDER[i]);
+  var html="<button class=\\"cat-tab"+(activeCat===-1?" active":"")+"\\" onclick=\\"selectCat(-1)\\">Toutes <span class=\\"count\\">"+totalAll+"</span></button>";
+  for(var i=0;i<CAT_ORDER.length;i++){
+    var c=CAT_ORDER[i];
+    html+="<button class=\\"cat-tab"+(activeCat===i?" active":"")+"\\" onclick=\\"selectCat("+i+")\\">"+esc(c)+" <span class=\\"count\\">"+countCat(c)+"</span></button>";
+  }
+  document.getElementById("catTabs").innerHTML=html;
+}
+function renderBrands(){
+  var idxList=activeCat===-1?[0,1,2,3,4]:[activeCat];
+  var merged=getMerged(idxList);
+  var brands=Object.keys(merged).sort();
+  var total=0;for(var i=0;i<brands.length;i++)total+=Object.keys(merged[brands[i]]).length;
+  document.getElementById("statsLine").innerHTML="<strong>"+total+"</strong> véhicules dans <strong>"+brands.length+"</strong> marques";
+  var html="";
+  for(var i=0;i<brands.length;i++){
+    var b=brands[i],models=Object.keys(merged[b]).sort();
+    html+="<div class=\\"brand-row\\"><div class=\\"brand-header\\" onclick=\\"this.closest('.brand-row').classList.toggle('open')\\">";
+    html+="<span class=\\"brand-name\\">"+esc(b)+"</span>";
+    html+="<div class=\\"brand-right\\"><span class=\\"brand-count\\">"+models.length+" modèle"+(models.length>1?"s":"")+"</span><span class=\\"brand-chevron\\">▼</span></div>";
+    html+="</div><div class=\\"models-list\\">";
+    for(var j=0;j<models.length;j++)html+="<div class=\\"model-item\\">"+esc(models[j])+"</div>";
+    html+="</div></div>";
+  }
+  document.getElementById("brandsGrid").innerHTML=html;
+}
+function selectCat(idx){activeCat=idx;renderTabs();renderBrands();}
+document.getElementById("searchInput").addEventListener("input",function(){
+  var q=this.value.trim();
+  var normal=document.getElementById("normalView");
+  var sr=document.getElementById("searchResults");
+  if(!q){normal.style.display="block";sr.style.display="none";return;}
+  normal.style.display="none";sr.style.display="block";
+  var ql=q.toLowerCase(),html="",total=0;
+  for(var ci=0;ci<CAT_ORDER.length;ci++){
+    var cat=CAT_ORDER[ci],items=[],brands=Object.keys(data[cat]||{}).sort();
+    for(var bi=0;bi<brands.length;bi++){
+      var b=brands[bi],models=data[cat][b];
+      for(var mi=0;mi<models.length;mi++){
+        var m=models[mi];
+        if((b+" "+m).toLowerCase().indexOf(ql)!==-1)items.push({b:b,m:m});
+      }
+    }
+    if(!items.length)continue;
+    total+=items.length;
+    html+="<div class=\\"search-result-group\\"><div class=\\"result-group-title\\">"+esc(cat)+" — "+items.length+" résultat"+(items.length>1?"s":"")+"</div><div class=\\"result-cards\\">";
+    for(var ii=0;ii<items.length;ii++)html+="<div class=\\"result-card\\"><div class=\\"result-brand\\">"+hi(items[ii].b,q)+"</div>"+hi(items[ii].m,q)+"</div>";
+    html+="</div></div>";
+  }
+  sr.innerHTML="<div class=\\"stats-line\\" style=\\"margin-bottom:20px\\"><strong>"+total+"</strong> résultat"+(total>1?"s":"")+" pour \xab "+esc(q)+" \xbb</div>"+(html||"<div class=\\"empty\\">Aucun r\xe9sultat pour \xab "+esc(q)+" \xbb</div>");
+});
+renderTabs();
+renderBrands();
+</script>
+</body>
+</html>'''
+
+with open('index.html', 'w') as f:
+    f.write(html)
+
+print("index.html generated successfully")
